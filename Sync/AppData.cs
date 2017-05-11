@@ -12,7 +12,6 @@ namespace Sync
     {
         static readonly public string AppDataFolder = Environment.ExpandEnvironmentVariables(@"%appdata%\Sync\");
         static readonly string settingsPath = new DirectoryInfo(AppDataFolder + "\\settings.json").FullName;
-        public readonly static string TrashFolder = new DirectoryInfo(AppDataFolder + "\\Trash\\").FullName;
         public static List<string> Trashed = new List<string>();
         public static Dictionary<string, _File> Files = new Dictionary<string, _File>();
         public static string Path { get; set; }
@@ -67,8 +66,6 @@ namespace Sync
             Trashed.Clear();
             File.Delete(settingsPath);
             Program.Watcher.EnableRaisingEvents = false;
-            try { Directory.Delete(TrashFolder, true); }
-            catch { }
             return false;
         }
     }
@@ -112,7 +109,7 @@ namespace Sync
     public enum StateCode
     {
         Error,
-        SetLocal,
+        Misc,
         Pending,
         OK
     }

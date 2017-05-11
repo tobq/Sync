@@ -42,7 +42,7 @@ namespace Sync
             return request.Execute().Files.OrderBy(x => x.AppProperties["priority"]);
         }
 
-        public static void QueueOperation(Action action, StateNotifcation? cancelToken)
+        public static void QueueOperation(Action action, StateNotification? cancelToken)
         {
             Queue.Enqueue(new Operation { Action = action, Cancel = cancelToken });
         }
@@ -199,13 +199,26 @@ namespace Sync
                 var UNRESOLVED = Program.AddOngoing(1, StateCode.Error, $"Failed to upload {Path.GetFileName(path)} as it could not be accessed");
             }
         }
+
+        void GetRemoteItems(string id, ref List<string> itemList)
+        {
+            itemList.Add(id);
+            var list = new List<string>();
+            ForEachChild(id, child => GetRemoteItems(child.Id, ref list));
+            itemList.AddRange(list);
+        }
+
         void SyncLocal(string itemPath)
         {
             _File Item;
+
             if (AppData.Files.TryGetValue(itemPath, out Item))
             {
                 var parentPath = Path.GetDirectoryName(itemPath);
                 var item = Service.Files.Get(Item.ID).Execute();
+
+                var itemList = new List<string>();
+
                 if (Directory.Exists(itemPath))
                 {
                     var name = new DirectoryInfo(itemPath).Name;
@@ -235,29 +248,17 @@ namespace Sync
             var newDir = validPath(parentPath, file);
             if (file.MimeType == FolderMIME) FillLocal(newDir, file.Id);
 
-            else if (file.Md5Checksum != null)
-            {
-                AppData.Files[newDir] = new _File { ID = file.Id, MD5 = file.Md5Checksum };
-
-                var copyPath = AppData.Files.FirstOrDefault(copyMatch(file)).Key;
-
-                StateNotifcation? copyNoti = null;
-                if (!string.IsNullOrEmpty(copyPath))
+            if (file.Md5Checksum == null) return;
+            AppData.Files[newDir] = new _File { ID = file.Id, MD5 = file.Md5Checksum };
+            var copyPath = AppData.Files.FirstOrDefault(copyMatch(file)).Key;
+            if (!string.IsNullOrEmpty(copyPath))
+                using (var copyNoti = Program.AddOngoing(0, StateCode.Pending, $"Copying {Path.GetFileName(copyPath)}"))
                 {
-                    copyNoti = Program.AddOngoing(0, StateCode.Pending, $"Copying {Path.GetFileName(copyPath)} file");
-                    if (AppData.Trashed.Contains(copyPath))
-                        copyPath = Path.Combine(AppData.TrashFolder, Path.GetFileName(copyPath));
-                    if (File.Exists(copyPath))
-                    {
-                        File.Copy(copyPath, newDir);
-                        copyNoti.Value.Dispose();
-                        return;
-                    }
+                    File.Copy(copyPath, newDir);
+                    return;
                 }
-                using (var stream = new FileStream(newDir, FileMode.Create, FileAccess.Write))
-                    Service.Files.Get(file.Id).Download(stream);
-                if (copyNoti.HasValue) copyNoti.Value.Dispose();
-            }
+            using (var stream = new FileStream(newDir, FileMode.Create, FileAccess.Write))
+                Service.Files.Get(file.Id).Download(stream);
         }
 
         void validatePath(ref string path, Google.Apis.Drive.v3.Data.File item)
@@ -282,7 +283,7 @@ namespace Sync
             var request = Service.Files.List();
             request.PageSize = 999;
             request.Fields = "files(name,id,mimeType,md5Checksum)";
-            request.Q = $"trashed = false and '{remoteID}' in parents";
+            request.Q = $"not trashed and '{remoteID}' in parents";
             do
             {
                 var response = request.Execute();
@@ -398,6 +399,20 @@ namespace Sync
             }, AppData.SettingID).Execute();
         }
 
+        public void PatchRemote()
+        {
+            foreach (var path in AppData.Files.Keys.ToList())
+                if (!File.Exists(path) && !Directory.Exists(path) && !AppData.Trashed.Contains(path))
+                    Program.onDelete(null, new FileSystemEventArgs(WatcherChangeTypes.Changed, Path.GetDirectoryName(path), Path.GetFileName(path)));
+            var items = new List<string>();
+            Utils.GetLocalItems(AppData.Path, ref items);
+            items.ForEach(item =>
+            {
+                var eventArgs = new FileSystemEventArgs(WatcherChangeTypes.Changed, Path.GetDirectoryName(item), Path.GetFileName(item));
+                if (AppData.Files.ContainsKey(item)) Program.onChange(null, eventArgs);
+                else Program.onCreate(null, eventArgs);
+            });
+        }
 
         public void Login(string successCode)
         {
@@ -410,8 +425,8 @@ namespace Sync
             load();
             if (GetSettings().ContainsKey("folder"))
             {
-                Program.ClearLocal(false, StateCode.SetLocal, "Set this computer's local folder");
-                Program.StateChanged(new StateNotifcation { Folder = 1 });
+                Program.ClearLocal(false, StateCode.Misc, "Set this computer's local folder");
+                Program.StateChanged(new StateNotification { Folder = 1 });
             }
             else
             {
@@ -436,7 +451,6 @@ namespace Sync
                     "https://www.googleapis.com/oauth2/v1/tokeninfo",
                     $"access_token={AppData.Access.access_token}"
                 ));
-                Directory.CreateDirectory(AppData.TrashFolder);
             }
             catch { AppData.Clear(); }
         }
@@ -480,7 +494,7 @@ namespace Sync
                     else URL = URL.Remove(s + 3) + size;
                 }
                 else URL = $"{URL}&sz={size}";
-                Image photo = Utils.getImage(URL);
+                Image photo = Utils.GetImage(URL);
                 if (crop)
                 {
                     var wh = Math.Min(photo.Height, photo.Width);
@@ -500,20 +514,26 @@ namespace Sync
                 return photo;
             }
         }
-        static Func<KeyValuePair<string, _File>, bool> copyMatch(Google.Apis.Drive.v3.Data.File file)
+        static Func<KeyValuePair<string, _File>, bool> copyMatch(Google.Apis.Drive.v3.Data.File toMatch)
         {
-            return new Func<KeyValuePair<string, _File>, bool>((c) =>
+            return new Func<KeyValuePair<string, _File>, bool>((file) =>
             {
-                string location = AppData.Trashed.Contains(c.Key) ? Path.Combine(AppData.TrashFolder, Path.GetFileName(c.Key)) : c.Key;
-                return c.Value.MD5 == file.Md5Checksum &&
-                File.Exists(location) &&
-                c.Value.MD5 == Utils.MD5String(md5.ComputeHash(File.ReadAllBytes(location)));
+                return file.Value.MD5 == toMatch.Md5Checksum &&
+                File.Exists(file.Key) &&
+                file.Value.MD5 == Utils.MD5String(md5.ComputeHash(File.ReadAllBytes(file.Key)));
             });
+        }
+        public void SetQuietHours(string time = null)
+        {
+            string QI = time ?? "00000000";
+            if (time == null) GetSettings().TryGetValue("quietHours", out QI);
+            QuietHours[0] = TimeSpan.ParseExact(QI.Substring(0, 2) + ":" + QI.Substring(2, 2), "c", null);
+            QuietHours[1] = TimeSpan.ParseExact(QI.Substring(4, 2) + ":" + QI.Substring(6, 2), "c", null);
         }
     }
     struct Operation
     {
         public Action Action;
-        public StateNotifcation? Cancel;
+        public StateNotification? Cancel;
     }
 }

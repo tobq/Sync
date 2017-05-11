@@ -13,8 +13,8 @@ namespace Sync
 {
     public partial class Local : Setting
     {
-        StateNotifcation? cancelToken;
-        public StateNotifcation? CancelToken
+        StateNotification? cancelToken;
+        public StateNotification? CancelToken
         {
             set
             {
@@ -64,7 +64,7 @@ namespace Sync
                     if (localFilled) GIO.QueueOperation(
                         () =>
                         {
-                            Program.gio.FillRemote(folderID,AppData.Path);
+                            Program.gio.FillRemote(folderID, AppData.Path);
                             Program.Watcher.EnableRaisingEvents = true;
                         },
                         Program.AddOngoing(1, StateCode.Pending, "Setting up Google Drive folder")

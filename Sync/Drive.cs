@@ -10,8 +10,8 @@ namespace Sync
 {
     public partial class Drive : Setting
     {
-        StateNotifcation? cancelToken;
-        public StateNotifcation? CancelToken
+        StateNotification? cancelToken;
+        public StateNotification? CancelToken
         {
             set
             {
@@ -181,7 +181,7 @@ namespace Sync
         }
         protected Image DriveIcon(string mime, int iconSize = 32)
         {
-            return Utils.getImage($"https://drive-thirdparty.googleusercontent.com/{iconSize}/type/{mime}");
+            return Utils.GetImage($"https://drive-thirdparty.googleusercontent.com/{iconSize}/type/{mime}");
         }
     }
     class DriveFolder : Fileder

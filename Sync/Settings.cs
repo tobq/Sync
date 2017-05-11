@@ -20,13 +20,12 @@ namespace Sync
         {
             InitializeComponent();
             Next.Text = "Done";
-            onstatechange = new Action<StateNotifcation?>(delegate (StateNotifcation? cancel)
+            onstatechange = new Action<StateNotification?>(delegate (StateNotification? cancel)
             {
                 if (cancel.HasValue)
                 {
                     if (Program.Ongoing[cancel.Value.Folder].Count == 0)
                     {
-                        string folderID;
                         if (cancel.Value.Folder == 0)
                         {
                             Local.Text = Path.GetFileName(AppData.Path);
@@ -35,6 +34,7 @@ namespace Sync
                         }
                         else
                         {
+                        string folderID;
                             if (Program.gio.GetSettings().TryGetValue("folder", out folderID)) Drive.Text = Program.gio.IDToName(folderID);
                             ClearD.Visible = true;
                             Drive.Padding = new Padding(105, 30, 100, 0);
@@ -58,14 +58,14 @@ namespace Sync
                             Drive.Padding = new Padding(105, 30, 50, 0);
                         }
                     }
-                    if (Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
+                    if (GIO.QuietTime || Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
                     {
                         MouseTip.RemoveAll();
                         Advanced.ForeColor = Color.Black;
                     }
                     else
                     {
-                        MouseTip.SetToolTip(Advanced, "You must finish the folder setup to access the advanced options menu");
+                        MouseTip.SetToolTip(Advanced, "You must finish the folder setup and wait for operations\n to finish to access the advanced options menu");
                         Advanced.ForeColor = Color.FromArgb(180, 180, 180);
                     }
                     Invalidate();
@@ -80,6 +80,7 @@ namespace Sync
         public override void show(Form opener = null)
         {
             SetTrayOpen();
+            Program.gio.SetQuietHours();
             Email.Text = Utils.Cap(GIO.user.email);
             base.show(opener);
         }
@@ -102,12 +103,12 @@ namespace Sync
                 g.FillEllipse(b, 70, 335, 20, 20);
             }
         }
-        public void OnStateChanged(StateNotifcation? cancel)
+        public void OnStateChanged(StateNotification? cancel)
         {
             if (InvokeRequired) Invoke(onstatechange, cancel);
             else onstatechange(cancel);
         }
-        Action<StateNotifcation?> onstatechange;
+        Action<StateNotification?> onstatechange;
         void LogoutClick(object sender, EventArgs e)
         {
             GIO.Logout(this);

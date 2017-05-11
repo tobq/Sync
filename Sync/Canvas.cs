@@ -40,7 +40,7 @@ namespace Sync
             Program.Settings.TopMost = false;
         }
 
-        static public void UpdateTrayIcon(StateNotifcation? cancel = null)
+        static public void UpdateTrayIcon(StateNotification? cancel = null)
         {
             if (Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0) Tray.Icon = Program.StateIcons[(int)StateCode.OK];
             else if (Program.Ongoing[0].Count > 0 && Program.Ongoing[0].Count > 0)
@@ -110,17 +110,6 @@ namespace Sync
             WindowState = FormWindowState.Normal;
             BringToFront();
             Tray.ContextMenuStrip.Items.Remove(settings);
-        }
-
-        protected void close(object sender = null, EventArgs e = null)
-        {
-            GIO.QueueOperation(() =>
-            {
-                Tray.Dispose();
-                if (Program.gio.Logged) AppData.Save();
-                Application.Exit();
-                Environment.Exit(0);
-            }, null);
         }
         //public abstract void NextClick(object sender, EventArgs e);
     }

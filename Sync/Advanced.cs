@@ -192,6 +192,7 @@ namespace Sync
                     Program.gio.UpdateProperties(priorities[i].Name, "prioritised", "true");
                     Program.gio.UpdateProperties(priorities[i].Name, "priority", i.ToString());
                 }
+                Program.gio.SetQuietHours(From.Text.Replace(":", "") + To.Text.Replace(":", ""));
             }
         }
         protected override void OnPaint(PaintEventArgs e)
@@ -209,7 +210,7 @@ namespace Sync
         }
         public override void show(Form opener)
         {
-            if (Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0 && AppData.Files != null)
+            if (GIO.QuietTime || AppData.Files != null && Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
             {
                 Control[] oldpriorities = new Control[prioritised.Controls.Count];
                 prioritised.Controls.CopyTo(oldpriorities, 0);

@@ -30,7 +30,7 @@ namespace Sync
         public static Advanced Advanced;
 
 
-        public delegate void StateChange(StateNotifcation? cancel = null);
+        public delegate void StateChange(StateNotification? cancel = null);
         public static StateChange StateChanged;
 
         public static class Colours
@@ -50,6 +50,17 @@ namespace Sync
         };
         public static MD5 md5 = MD5.Create();
         static EventWaitHandle hevent;
+        static Action closeAction = () =>
+        {
+            Canvas.Tray.Dispose();
+            if (gio.Logged) AppData.Save();
+            Application.Exit();
+            Environment.Exit(0);
+        };
+        public static void Close(object sender = null, EventArgs e = null) {
+            if (GIO.QuietTime)  closeAction();
+            else GIO.QueueOperation(closeAction, AddOngoing(0, StateCode.Misc, "Closing Application..."));
+        }
 
         [STAThread]
         static void Main()
@@ -101,8 +112,8 @@ namespace Sync
 
                 string folderID;
                 if (AppData.Path == null) ClearLocal();
-                else StateChanged(new StateNotifcation { Folder = 0 });
-                if (gio.GetSettings().TryGetValue("folder", out folderID)) StateChanged(new StateNotifcation { Folder = 1 });
+                else StateChanged(new StateNotification { Folder = 0 });
+                if (gio.GetSettings().TryGetValue("folder", out folderID)) StateChanged(new StateNotification { Folder = 1 });
                 else ClearDrive();
                 AppData.Save();
 
@@ -112,6 +123,7 @@ namespace Sync
                     {
                         Watcher.Path = AppData.Path;
                         Watcher.EnableRaisingEvents = true;
+                        gio.PatchRemote();
                     }
                     else ClearDrive();
                 }
@@ -122,12 +134,12 @@ namespace Sync
             Application.Run();
         }
 
-        private static void onDelete(object sender, FileSystemEventArgs e)
+        public static void onDelete(object sender, FileSystemEventArgs e)
         {
             if (AppData.Files.ContainsKey(e.FullPath) && !AppData.Trashed.Contains(e.FullPath) && !RecentlyDeleted.Contains(e.FullPath))
             {
                 RecentlyDeleted.Add(e.FullPath);
-                var timer = new System.Timers.Timer(500);
+                var timer = new System.Timers.Timer(1000);
                 timer.Elapsed += (S, E) =>
                 {
                     if (RecentlyDeleted.Contains(e.FullPath))
@@ -141,7 +153,7 @@ namespace Sync
                         timer.Dispose();
                         GIO.QueueOperation(
                             () => gio.Trash(trashID, true),
-                            AddOngoing(1, StateCode.Pending, $"Trashing {Path.GetFileName(e.FullPath)}")
+                            AddOngoing(1, StateCode.Pending, $"Trashing {e.Name}")
                         );
                     }
                 };
@@ -149,7 +161,7 @@ namespace Sync
             }
         }
 
-        static void onCreate(object s, FileSystemEventArgs e)
+        public static void onCreate(object s, FileSystemEventArgs e)
         {
             if (AppData.Files.ContainsKey(e.FullPath) && !AppData.Trashed.Contains(e.FullPath)) return;
             AppData.Trashed.Remove(e.FullPath);
@@ -159,10 +171,10 @@ namespace Sync
                 GIO.QueueOperation(
                     () => AppData.Files[e.FullPath] = new _File
                     {
-                        ID = gio.NewFolder(new DirectoryInfo(e.FullPath).Name,
+                        ID = gio.NewFolder(e.Name,
                         AppData.Files[Path.GetDirectoryName(e.FullPath)].ID)
                     },
-                    AddOngoing(1, StateCode.Pending, $"Creating new folder {Path.GetFileName(e.FullPath)}")
+                    AddOngoing(1, StateCode.Pending, $"Creating new folder {e.Name}")
                 );
             }
             else
@@ -181,18 +193,18 @@ namespace Sync
                 while (--tries > 0);
                 if (tries == 0)
                 {
-                    var UNRESOLVED = AddOngoing(0, StateCode.Error, $"Failed to apply changes for {Path.GetFileName(e.FullPath)} as the file could not be opened");
+                    var UNRESOLVED = AddOngoing(0, StateCode.Error, $"Failed to apply changes for {e.Name} as the file could not be opened");
                     return;
                 }
                 foreach (var deletedKey in RecentlyDeleted.ToArray())
                 {
                     if (AppData.Files[deletedKey].MD5 == checksum
-                        && Path.GetFileName(deletedKey) == Path.GetFileName(e.FullPath))
+                        && Path.GetFileName(deletedKey) == e.Name)
                     {
                         RecentlyDeleted.Remove(deletedKey);
                         GIO.QueueOperation(
                             () => gio.Move(deletedKey, e.FullPath),
-                            AddOngoing(1, StateCode.Pending, $"Moving {Path.GetFileName(e.FullPath)}")
+                            AddOngoing(1, StateCode.Pending, $"Moving {e.Name}")
                         );
                         return;
                     }
@@ -202,14 +214,13 @@ namespace Sync
                     if (AppData.Files.ContainsKey(trashedKey))
                     {
                         if (AppData.Files[trashedKey].MD5 == checksum
-                            && Path.GetFileName(trashedKey) == Path.GetFileName(e.FullPath))
+                            && Path.GetFileName(trashedKey) == e.Name)
                         {
                             AppData.Trashed.Remove(trashedKey);
-                            File.Delete(Path.Combine(AppData.TrashFolder, Path.GetFileName(trashedKey)));
 
                             GIO.QueueOperation(
                                 () => gio.Trash(AppData.Files[trashedKey].ID, false),
-                                AddOngoing(1, StateCode.Pending, $"Untrashing {Path.GetFileName(e.FullPath)}")
+                                AddOngoing(1, StateCode.Pending, $"Untrashing {e.Name}")
                             );
                             return;
                         }
@@ -218,7 +229,7 @@ namespace Sync
                 }
                 GIO.QueueOperation(
                     () => gio.Upload(e.FullPath, AppData.Files[Path.GetDirectoryName(e.FullPath)].ID),
-                    AddOngoing(1, StateCode.Pending, $"Uploading {Path.GetFileName(e.FullPath)}"));
+                    AddOngoing(1, StateCode.Pending, $"Uploading {e.Name}"));
             }
         }
 
@@ -230,7 +241,7 @@ namespace Sync
             {
                 AppData.Files[e.FullPath] = file;
                 AppData.Files.Remove(e.OldFullPath);
-                var newName = Path.GetFileName(e.FullPath);
+                var newName = e.Name;
                 GIO.QueueOperation(
                     () => gio.Rename(file.ID, newName),
                     AddOngoing(1, StateCode.Pending, $"Renaming remote item to {newName}")
@@ -238,50 +249,51 @@ namespace Sync
             }
             else GIO.QueueOperation(
                () => gio.Upload(e.FullPath, AppData.Files[Path.GetDirectoryName(e.FullPath)].ID),
-               AddOngoing(1, StateCode.Pending, $"Uploading {Path.GetFileName(e.FullPath)}")
+               AddOngoing(1, StateCode.Pending, $"Uploading {e.Name}")
            );
         }
 
-        static void onChange(object s, FileSystemEventArgs e)
+        public static void onChange(object s, FileSystemEventArgs e)
         {
             if (Directory.Exists(e.FullPath)) return;
-            string checksum = "";
-            var tries = 5;
-            do
+            if (AppData.Files.ContainsKey(e.FullPath))
             {
-                try
+                string checksum = "";
+                var tries = 5;
+                do
                 {
-                    checksum = Utils.MD5String(md5.ComputeHash(File.ReadAllBytes(e.FullPath)));
-                    break;
+                    try
+                    {
+                        checksum = Utils.MD5String(md5.ComputeHash(File.ReadAllBytes(e.FullPath)));
+                        break;
+                    }
+                    catch (IOException) { Thread.Sleep(2000 / tries); }
                 }
-                catch (IOException) { Thread.Sleep(2000 / tries); }
-            }
-            while (--tries > 0);
-            if (tries == 0)
-            {
-                var UNRESOLVED = AddOngoing(0, StateCode.Error, $"Failed to apply changes for {Path.GetFileName(e.FullPath)} as file could not be opened");
-                var timer = new System.Timers.Timer(5000);
-                timer.Elapsed += (sender, args) =>
+                while (--tries > 0);
+                if (tries == 0)
                 {
-                    timer.Stop();
-                    timer.Close();
-                    timer.Dispose();
-                    UNRESOLVED.Dispose();
-                };
-                timer.Start();
-                return;
+                    var UNRESOLVED = AddOngoing(0, StateCode.Error, $"Failed to apply changes for {e.Name} as file could not be opened");
+                    var timer = new System.Timers.Timer(5000);
+                    timer.Elapsed += (sender, args) =>
+                    {
+                        timer.Stop();
+                        timer.Close();
+                        timer.Dispose();
+                        UNRESOLVED.Dispose();
+                    };
+                    timer.Start();
+                    return;
+                }
+                if (checksum != AppData.Files[e.FullPath].MD5)
+                    GIO.QueueOperation(
+                        () => gio.Update(e.FullPath),
+                        AddOngoing(1, StateCode.Pending, $"Applying changes to {e.Name}")
+                    );
             }
-            if (
-              AppData.Files.ContainsKey(e.FullPath) &&
-              checksum != AppData.Files[e.FullPath].MD5)
-                GIO.QueueOperation(
-                    () => gio.Update(e.FullPath),
-                    AddOngoing(1, StateCode.Pending, $"Applying changes to {Path.GetFileName(e.FullPath)}")
-                );
         }
-        public static StateNotifcation AddOngoing(int folderIndex, StateCode state, string msg)
+        public static StateNotification AddOngoing(int folderIndex, StateCode state, string msg)
         {
-            var cancel = new StateNotifcation
+            var cancel = new StateNotification
             {
                 CancelToken = DateTime.Now.Ticks,
                 Folder = folderIndex
@@ -291,7 +303,7 @@ namespace Sync
                 State = state,
                 Message = msg
             };
-            StateChanged(cancel);
+            if (StateChanged != null) StateChanged(cancel);
             return cancel;
         }
         public static void OpenLocal(object sender, EventArgs e)
@@ -316,7 +328,7 @@ namespace Sync
                 AppData.Save();
                 Drive.CancelToken = AddOngoing(1, StateCode.Error, "Select a Google Drive folder");
             },
-            showClearing ? AddOngoing(1, StateCode.Pending, "Clearing Google Drive folder") : (StateNotifcation?)null);
+            showClearing ? AddOngoing(1, StateCode.Pending, "Clearing Google Drive folder") : (StateNotification?)null);
         }
         public static void ClearLocal(bool showClearing = false, StateCode state = StateCode.Error, string msg = "Select a local folder")
         {
@@ -329,10 +341,10 @@ namespace Sync
                 AppData.Save();
                 Local.CancelToken = AddOngoing(0, state, msg);
             },
-            showClearing ? AddOngoing(0, StateCode.Pending, "Clearing Local Drive folder") : (StateNotifcation?)null);
+            showClearing ? AddOngoing(0, StateCode.Pending, "Clearing Local Drive folder") : (StateNotification?)null);
         }
     }
-    public struct StateNotifcation : IDisposable
+    public struct StateNotification : IDisposable
     {
         public long CancelToken;
         public int Folder;

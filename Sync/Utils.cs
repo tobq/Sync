@@ -9,13 +9,18 @@ using System.Text.RegularExpressions;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using Shell32;
-using Microsoft.CSharp.RuntimeBinder;
 
 namespace Sync
 {
     static class Utils
     {
-        public static Folder RecyclingBin = new Shell().NameSpace(10);
+        public static Folder RecyclingBin
+        {
+            [STAThread]
+            get;
+            [STAThread]
+            set;
+        } = new Shell().NameSpace(10);
 
         [DllImport("wininet.dll", CharSet = CharSet.Auto, SetLastError = true)]
         static extern bool InternetSetOption(int hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);
@@ -66,7 +71,7 @@ namespace Sync
             JSON = JSON.Substring(JSON.IndexOf("\"" + key + "\"") + key.Length + 4);
             return JSON.Substring(0, JSON.IndexOf("\""));
         }
-        public static Image getImage(string url)
+        public static Image GetImage(string url)
         {
             var wc = new WebClient();
             byte[] bytes = wc.DownloadData(url);
@@ -90,8 +95,8 @@ namespace Sync
         }
 
         [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
-        static extern int memcmp(byte[] bytes, byte[] Bytes, long count);
-        public static bool HashComp(byte[] h, byte[] H) { return h.Length == H.Length && memcmp(h, H, h.Length) == 0; }
+        static extern int MemCmp(byte[] bytes, byte[] Bytes, long count);
+        public static bool HashComp(byte[] h, byte[] H) { return h.Length == H.Length && MemCmp(h, H, h.Length) == 0; }
 
         static public string UniquePath(string path)
         {
@@ -114,18 +119,25 @@ namespace Sync
 
         public static bool RestoreItem(string ItemPath)
         {
-            foreach (FolderItem folderItem in RecyclingBin.Items())
+            foreach (FolderItem2 folderItem in RecyclingBin.Items())
             {
-                var FileName = RecyclingBin.GetDetailsOf(folderItem, 0);
-                if (Path.GetExtension(FileName) == "") FileName += Path.GetExtension(folderItem.Path);
-                var FilePath = RecyclingBin.GetDetailsOf(folderItem, 1);
-                if (ItemPath == Path.Combine(FilePath, FileName))
-                {
-                    folderItem.InvokeVerb("R&estore");
-                    return true;
-                }
+                if (ItemPath == folderItem.ExtendedProperty("System.Recycle.DeletedFrom") + folderItem.Name)
+                    foreach (FolderItemVerb verb in folderItem.Verbs())
+                        if (verb.Name.ToLower().Contains("estore"))
+                        {
+                            verb.DoIt();
+                            return true;
+                        }
+
             }
             return false;
+        }
+        public static void GetLocalItems(string path, ref List<string> itemList)
+        {
+            itemList.Add(path);
+            itemList.AddRange(Directory.GetFiles(path));
+            var subDirs = Directory.GetDirectories(path);
+            for (var i = subDirs.Length; i-- > 0;) GetLocalItems(subDirs[i], ref itemList);
         }
     }
 }

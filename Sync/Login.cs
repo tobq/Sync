@@ -17,7 +17,6 @@ namespace Sync
             Next.Text = "Retry";
             Next.Visible = false;
         }
-        [STAThread]
         public override void show(Form opener = null)
         {
             Utils.SetBrowser();
@@ -31,7 +30,7 @@ namespace Sync
         }
         protected override void hide(object sender = null, EventArgs e = null)
         {
-            close();
+            Program.Close();
         }
         void BrowserLoad(object sender, WebBrowserDocumentCompletedEventArgs e)
         {
