@@ -52,7 +52,6 @@ namespace Sync
                     var localFilled = Directory.EnumerateFileSystemEntries(Path.Text).Any();
                     if (localFilled && Program.gio.HasChildren(folderID))
                     {
-
                         Info.Text = "At least one of your selected folders must be empty for set up. Select an empty folder, or change your Google Drive folder";
                         Info.ForeColor = Color.FromArgb(150, 0, 0);
                         return;
@@ -61,23 +60,23 @@ namespace Sync
                     Program.Watcher.Path = AppData.Path = Path.Text;
                     AppData.Files = new Dictionary<string, _File>();
 
-                    if (localFilled) GIO.QueueOperation(
+                    if (localFilled) GIO.AddOperation(
                         () =>
                         {
                             Program.gio.FillRemote(folderID, AppData.Path);
                             Program.Watcher.EnableRaisingEvents = true;
                         },
-                        Program.AddOngoing(1, StateCode.Pending, "Setting up Google Drive folder")
+                        Program.AddOngoing(1, StateCode.Pending, "Setting up Google Drive folder"), null
                     );
                     else
                     {
-                        GIO.QueueOperation(
+                        GIO.AddOperation(
                             () =>
                             {
                                 Program.gio.FillLocal(AppData.Path, folderID);
                                 Program.Watcher.EnableRaisingEvents = true;
                             },
-                            Program.AddOngoing(0, StateCode.Pending, "Setting up local folder")
+                            Program.AddOngoing(0, StateCode.Pending, "Setting up local folder"), null
                         );
                     }
                     Program.Settings.show(this);
@@ -86,7 +85,12 @@ namespace Sync
 
                 }
             }
-            else Folder.Text = "That folder path does not exist";
+            else
+            {
+                Info.Text = "That folder does not exist";
+                Info.ForeColor = Color.FromArgb(150, 0, 0);
+                return;
+            }
         }
         void resetText()
         {
@@ -106,6 +110,7 @@ namespace Sync
 
         public override void show(Form opener)
         {
+            if (Program.Ongoing[0].Values.Any(og => og.State == StateCode.Pending)) return;
             Path.Text = AppData.Path;
             ActiveControl = Path;
             base.show(opener);

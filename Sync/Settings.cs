@@ -34,7 +34,7 @@ namespace Sync
                         }
                         else
                         {
-                        string folderID;
+                            string folderID;
                             if (Program.gio.GetSettings().TryGetValue("folder", out folderID)) Drive.Text = Program.gio.IDToName(folderID);
                             ClearD.Visible = true;
                             Drive.Padding = new Padding(105, 30, 100, 0);
@@ -43,7 +43,8 @@ namespace Sync
                     }
                     else
                     {
-                        var eventinfo = Program.Ongoing[cancel.Value.Folder].OrderBy(e => e.Value.State).ThenByDescending(e => e.Key).First();
+                        var eventinfo = Program.Ongoing[cancel.Value.Folder]
+                        .OrderBy(e => e.Value.State).ThenByDescending(e => e.Key).First();
                         folderColours[cancel.Value.Folder] = Program.StateColours[(int)eventinfo.Value.State];
                         if (cancel.Value.Folder == 0)
                         {
@@ -58,7 +59,9 @@ namespace Sync
                             Drive.Padding = new Padding(105, 30, 50, 0);
                         }
                     }
-                    if (GIO.QuietTime || Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
+                    if (AppData.Files != null &&
+                    GIO.QuietTime ||
+                    Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
                     {
                         MouseTip.RemoveAll();
                         Advanced.ForeColor = Color.Black;
@@ -79,10 +82,10 @@ namespace Sync
         }
         public override void show(Form opener = null)
         {
-            SetTrayOpen();
-            Program.gio.SetQuietHours();
             Email.Text = Utils.Cap(GIO.user.email);
             base.show(opener);
+            SetTrayOpen();
+            Program.gio.SetQuietHours();
         }
         protected override void OnPaint(PaintEventArgs e)
         {

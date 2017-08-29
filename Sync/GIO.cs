@@ -42,9 +42,27 @@ namespace Sync
             return request.Execute().Files.OrderBy(x => x.AppProperties["priority"]);
         }
 
-        public static void QueueOperation(Action action, StateNotification? cancelToken)
+        public static void AddOperation(Action action, StateNotification? cancelToken, int? priority)
         {
-            Queue.Enqueue(new Operation { Action = action, Cancel = cancelToken });
+            var operation = new Operation { Action = action, Cancel = cancelToken, Priority = priority };
+            lock (Queue)
+            {
+                if (priority.HasValue && Queue.Count > 0)
+                {
+                    var node = Queue.First;
+                    while (node.Value.Priority <= priority)
+                    {
+                        if (node.Next == null)
+                        {
+                            Queue.AddLast(operation);
+                            return;
+                        }
+                        node = node.Next;
+                    }
+                    Queue.AddBefore(node, operation);
+                }
+                else Queue.AddLast(operation);
+            }
         }
 
         public void Rename(string ID, string newName)
@@ -114,20 +132,6 @@ namespace Sync
             };
             AppData.Files.Remove(oldPath);
         }
-        public void Copy(string ID, string newPath)
-        {
-            var request = Service.Files.Copy(
-                new Google.Apis.Drive.v3.Data.File
-                {
-                    Parents = new List<string> { AppData.Files[Path.GetDirectoryName(newPath)].ID },
-                    Name = Path.GetFileName(newPath)
-                }, ID
-            );
-            request.Fields = "id, md5Checksum";
-            var copy = request.Execute();
-            UpdateProperties(copy.Id, "lastMd5", copy.Md5Checksum);
-            AppData.Files[newPath] = new _File { ID = copy.Id, MD5 = copy.Md5Checksum };
-        }
 
         public string NewFolder(string name, string parentID)
         {
@@ -172,7 +176,17 @@ namespace Sync
                             foreach (var match in searchRequest.Execute().Files)
                                 if (match.Md5Checksum == checksum)
                                 {
-                                    Copy(match.Id, path);
+                                    var request = Service.Files.Copy(
+                                        new Google.Apis.Drive.v3.Data.File
+                                        {
+                                            Parents = new List<string> { AppData.Files[Path.GetDirectoryName(path)].ID },
+                                            Name = Path.GetFileName(path)
+                                        }, match.Id
+                                    );
+                                    request.Fields = "id, md5Checksum";
+                                    var copy = request.Execute();
+                                    UpdateProperties(copy.Id, "lastMd5", copy.Md5Checksum);
+                                    AppData.Files[path] = new _File { ID = copy.Id, MD5 = copy.Md5Checksum };
                                     return;
                                 }
                                 else UpdateProperties(match.Id, "lastMd5", match.Md5Checksum);
@@ -314,14 +328,29 @@ namespace Sync
         }
         public static void Logout(System.Windows.Forms.Form opener = null)
         {
-            QueueOperation(() =>
+            AddOperation(() =>
             {
                 Canvas.Tray.Visible = false;
                 Program.Ongoing[0].Clear();
                 Program.Ongoing[1].Clear();
+                Program.RecentlyDeleted = new List<string>();
+                Program.Ongoing = new[] {
+                    new Dictionary<long, StateInfo>(),
+                    new Dictionary<long, StateInfo>()
+                };
+
                 AppData.Clear();
-            }, null);
+            }, null, null);
             Program.Login.show(opener ?? Program.Settings);
+        }
+        public int? GetPriority(string fileID)
+        {
+            var request = Service.Files.Get(fileID);
+            request.Fields = "id, appProperties";
+            string  prio ="";
+            request.Execute().AppProperties?.TryGetValue("priority", out prio);
+            int priority;
+            return int.TryParse(prio, out priority) ? priority : (int?)null;
         }
         public IDictionary<string, string> GetSettings()
         {
@@ -356,7 +385,8 @@ namespace Sync
             var createRequest = Service.Files.Create(new Google.Apis.Drive.v3.Data.File
             {
                 Name = "Sync.settings",
-                AppProperties = new Dictionary<string, string> { { "quietHours", "00000000" } }
+                AppProperties = new Dictionary<string, string> { { "quietHours", "00000000" } },
+                Parents = new List<string> { "appDataFolder" }
             });
             createRequest.Fields = "id, appProperties";
             var newSettings = createRequest.Execute();
@@ -525,15 +555,16 @@ namespace Sync
         }
         public void SetQuietHours(string time = null)
         {
-            string QI = time ?? "00000000";
-            if (time == null) GetSettings().TryGetValue("quietHours", out QI);
+            string remoteQI = string.Empty;
+            string QI = time ?? (GetSettings().TryGetValue("quietHours", out remoteQI) ? remoteQI : "00000000");
             QuietHours[0] = TimeSpan.ParseExact(QI.Substring(0, 2) + ":" + QI.Substring(2, 2), "c", null);
             QuietHours[1] = TimeSpan.ParseExact(QI.Substring(4, 2) + ":" + QI.Substring(6, 2), "c", null);
         }
     }
-    struct Operation
+    public struct Operation
     {
         public Action Action;
         public StateNotification? Cancel;
+        public int? Priority;
     }
 }

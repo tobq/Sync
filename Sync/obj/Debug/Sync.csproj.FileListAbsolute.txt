@@ -69,4 +69,3 @@ C:\Users\Tobi\Documents\Coursework\Computer Science\Sync\Sync\bin\Debug\Google.A
 C:\Users\Tobi\Documents\Coursework\Computer Science\Sync\Sync\obj\Debug\Interop.Shell32.dll
 C:\Users\Tobi\Documents\Coursework\Computer Science\Sync\Sync\obj\Debug\Sync.csproj.ResolveComReference.cache
 C:\Users\Tobi\Documents\Coursework\Computer Science\Sync\Sync\bin\Debug\client.json
-C:\Users\Tobi\Documents\Coursework\Computer Science\Sync\Sync\obj\Debug\Sync.csprojResolveAssemblyReference.cache

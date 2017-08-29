@@ -63,9 +63,13 @@ namespace Sync
         void DragMove(object sender, MouseEventArgs e) { if (Dragger.Down) Location = new Point(Location.X + e.X - Dragger.X, Location.Y + e.Y - Dragger.Y); }
         protected virtual void hide(object sender = null, EventArgs e = null)
         {
-            Hide();
-            hidden = true;
-            Tray.ContextMenuStrip.Items.Insert(1, settings);
+            if (Program.gio.Logged)
+            {
+                Hide();
+                hidden = true;
+                Tray.ContextMenuStrip.Items.Insert(1, settings);
+            }
+            else Close();
         }
         void MinClick(object sender, EventArgs e) { WindowState = FormWindowState.Minimized; }
         void onMouseUp(object sender, MouseEventArgs e) { Dragger.Down = false; }

@@ -11,7 +11,7 @@ namespace Sync
     partial class GIO
     {
         static public Thread Poller;
-        static Queue<Operation> Queue = new Queue<Operation>();
+        static LinkedList<Operation> Queue = new LinkedList<Operation>();
         static TimeSpan[] QuietHours = new TimeSpan[2];
         static StateNotification? SleepNoti;
         static bool patchNeeded;
@@ -29,7 +29,7 @@ namespace Sync
                 if (QuietHours[0] == null || QuietHours[1] == null) SetQuietHours();
 
                 if (QuietHours[0] < QuietHours[1]) QuietTime = QuietHours[0] <= currentTtime && currentTtime <= QuietHours[1];
-                else QuietTime = QuietHours[1] < currentTtime || currentTtime < QuietHours[0];
+                else if (QuietHours[0] > QuietHours[1]) QuietTime = QuietHours[1] < currentTtime || currentTtime < QuietHours[0];
 
                 if (patchNeeded == !QuietTime)
                 {
@@ -64,7 +64,7 @@ namespace Sync
                             if (change?.File?.Md5Checksum == null && change.File?.MimeType != FolderMIME)
                                 continue;
 
-                            var path = AppData.Files.ToList().FirstOrDefault(f => f.Value.ID == change.File.Id).Key;
+                            var path = AppData.Files.ToList().FirstOrDefault(f => f.Value?.ID == change.File.Id).Key;
                             var parentPath = Path.GetDirectoryName(path);
                             var driveParentPath = AppData.Files.FirstOrDefault(f => f.Value.ID == change?.File?.Parents[0]).Key;
                             if (driveParentPath == null)
@@ -115,21 +115,16 @@ namespace Sync
                             {
                                 validatePath(ref drivePath, change.File);
                                 string action;
-                                if (change.File.Parents[0] == AppData.Files[parentPath].ID)
-                                    action = "Renaming ";
-                                else
-                                    action = "Moving ";
+                                if (change.File.Parents[0] == AppData.Files[parentPath].ID) action = "Renaming ";
+                                else action = "Moving ";
                                 using (var noti = Program.AddOngoing(0, StateCode.Pending, action + Path.GetFileName(path)))
                                 {
                                     AppData.Files[drivePath] = AppData.Files[path];
                                     AppData.Files.Remove(path);
 
-                                    if (Directory.Exists(path))
-                                        Directory.Move(path, drivePath);
-                                    else if (File.Exists(path))
-                                        File.Move(path, drivePath);
-                                    else
-                                        Download(change.File, driveParentPath);
+                                    if (Directory.Exists(path)) Directory.Move(path, drivePath);
+                                    else if (File.Exists(path)) File.Move(path, drivePath);
+                                    else Download(change.File, driveParentPath);
                                     changeMade = true;
                                 }
                             }
@@ -168,7 +163,8 @@ namespace Sync
                     while (Queue.Count > 0)
                     {
                         bool completed = false;
-                        var operation = Queue.Dequeue();
+                        var operation = Queue.First();
+                        Queue.RemoveFirst();
 
                         while (!completed)
                         {
@@ -179,7 +175,9 @@ namespace Sync
                                 if (operation.Cancel.HasValue)
                                     operation.Cancel.Value.Dispose();
                             }
+#pragma warning disable CS0168 // The variable 'e' is declared but never used
                             catch (Exception e)
+#pragma warning restore CS0168 // The variable 'e' is declared but never used
                             {
                                 using (var noti = Program.AddOngoing(operation.Cancel.Value.Folder, StateCode.Error, "Retrying in 2 seconds ..."))
                                     Thread.Sleep(2000);

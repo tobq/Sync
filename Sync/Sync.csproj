@@ -42,11 +42,15 @@
     <DebugSymbols>true</DebugSymbols>
   </PropertyGroup>
   <PropertyGroup>
-    <ApplicationIcon>Drive-01.ico</ApplicationIcon>
+    <ApplicationIcon>Drive.ico</ApplicationIcon>
+  </PropertyGroup>
+  <PropertyGroup>
+    <StartupObject />
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="AppData.cs" />
     <Compile Include="GIO.Poll.cs" />
+    <Compile Include="GlobalSuppressions.cs" />
     <Compile Include="IconedLabel.cs">
       <SubType>Component</SubType>
     </Compile>
@@ -165,6 +169,7 @@
     <None Include="Resources\Close1.png" />
     <None Include="Resources\Add.png" />
     <None Include="Resources\Info.png" />
+    <Content Include="Drive.ico" />
     <Content Include="Sync.exe" />
   </ItemGroup>
   <ItemGroup>

@@ -121,7 +121,7 @@ namespace Sync
         {
             foreach (FolderItem2 folderItem in RecyclingBin.Items())
             {
-                if (ItemPath == folderItem.ExtendedProperty("System.Recycle.DeletedFrom") + folderItem.Name)
+                if (ItemPath == folderItem.ExtendedProperty("System.Recycle.DeletedFrom") + "\\" + folderItem.Name)
                     foreach (FolderItemVerb verb in folderItem.Verbs())
                         if (verb.Name.ToLower().Contains("estore"))
                         {

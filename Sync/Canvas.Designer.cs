@@ -137,7 +137,7 @@
             this.closeToolStripMenuItem.Name = "closeToolStripMenuItem";
             this.closeToolStripMenuItem.Size = new System.Drawing.Size(107, 22);
             this.closeToolStripMenuItem.Text = "Close";
-            this.closeToolStripMenuItem.Click += new System.EventHandler(Program.Close);
+            this.closeToolStripMenuItem.Click += Program.Close;
             // 
             // Drag
             // 

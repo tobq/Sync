@@ -76,14 +76,14 @@ namespace Sync
                 CancelToken = null;
                 return;
             }
-            if (AppData.Path == null)
-            {
-                Program.gio.UpdateFolder(lastVisited.Name);
-                Program.Settings.show(this);
-                CancelToken = null;
-                clearFolders();
-                resetText();
-            }
+            if (AppData.Path == null) using (var noti = Program.AddOngoing(1, StateCode.Pending, "Updating remote folder"))
+                {
+                    Program.gio.UpdateFolder(lastVisited.Name);
+                    Program.Settings.show(this);
+                    CancelToken = null;
+                    clearFolders();
+                    resetText();
+                }
             else
             {
                 var localFilled = Directory.Exists(AppData.Path) && Directory.EnumerateFileSystemEntries(AppData.Path).Any();
@@ -95,30 +95,31 @@ namespace Sync
                     return;
                 }
                 Program.Watcher.EnableRaisingEvents = false;
-                Program.gio.UpdateFolder(lastVisited.Name);
+
                 AppData.Files = new Dictionary<string, _File>();
 
-                if (localFilled) GIO.QueueOperation(
+                Program.Settings.show(this);
+                if (localFilled) GIO.AddOperation(
                     () =>
                     {
-                        Program.gio.FillRemote(lastVisited.Name,AppData.Path);
+                        Program.gio.FillRemote(lastVisited.Name, AppData.Path);
                         if (!string.IsNullOrEmpty(Program.Watcher.Path)) Program.Watcher.EnableRaisingEvents = true;
                     },
-                    Program.AddOngoing(1, StateCode.Pending, "Setting up Google Drive folder")
+                    Program.AddOngoing(1, StateCode.Pending, "Setting up Google Drive folder"), null
                 );
                 else
                 {
-                    GIO.QueueOperation(
+                    GIO.AddOperation(
                         () =>
                         {
-                            Program.gio.FillLocal(AppData.Path,lastVisited.Name);
+                            Program.gio.FillLocal(AppData.Path, lastVisited.Name);
                             Program.Watcher.EnableRaisingEvents = true;
                         },
-                        Program.AddOngoing(0, StateCode.Pending, "Setting up local folder")
+                        Program.AddOngoing(0, StateCode.Pending, "Setting up local folder"), null
                     );
                     Program.Watcher.Path = AppData.Path;
                 }
-                Program.Settings.show(this);
+                Program.gio.UpdateFolder(lastVisited.Name);
                 CancelToken = null;
                 clearFolders();
                 resetText();
@@ -126,6 +127,7 @@ namespace Sync
         }
         public override void show(Form opener)
         {
+            if (Program.Ongoing[1].Values.Any(og => og.State == StateCode.Pending)) return;
             Program.Drive.Visit("root", "Drive");
             base.show(opener);
         }

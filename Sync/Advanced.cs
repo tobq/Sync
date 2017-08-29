@@ -34,7 +34,11 @@ namespace Sync
                 selected.StartsWith(local) &&
                 selected.Length > local.Length &&
                 !prioritised.Controls.ContainsKey(selected))
-                prioritised.Controls.Add(new Prioritised(dialog.SelectedPath));
+            {
+                var prio = new Prioritised(dialog.SelectedPath);
+                prioritised.Controls.Add(prio);
+                prioritised.Controls.SetChildIndex(prio,0);
+            }
         }
         class PriorityPanel : FlowLayoutPanel
         {
@@ -210,7 +214,9 @@ namespace Sync
         }
         public override void show(Form opener)
         {
-            if (GIO.QuietTime || AppData.Files != null && Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
+            if (AppData.Files != null &&
+                GIO.QuietTime ||
+                Program.Ongoing[0].Count + Program.Ongoing[1].Count == 0)
             {
                 Control[] oldpriorities = new Control[prioritised.Controls.Count];
                 prioritised.Controls.CopyTo(oldpriorities, 0);
